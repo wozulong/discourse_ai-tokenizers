@@ -30,19 +30,22 @@ module DiscourseAi
           # fast track common case, /2 to handle unicode chars
           # than can take more than 1 token per char
           return text if !strict && text.size < max_length / 2
-
+          
           # Take tokens up to max_length, decode, then ensure we don't exceed limit
-          truncated_tokens = tokenize(text).take(max_length)
-          truncated_text = tokenizer.decode(truncated_tokens)
-
-          # If re-encoding exceeds the limit, we need to further truncate
-          while tokenize(truncated_text).length > max_length
-            truncated_tokens = truncated_tokens[0...-1]
-            truncated_text = tokenizer.decode(truncated_tokens)
-            break if truncated_tokens.empty?
+          tokens = tokenize(text)
+          return text if tokens.length <= max_length
+          
+          # Take tokens up to max_length
+          truncated_tokens = tokens.take(max_length)
+          
+          # Try to decode, with retry on Unicode errors
+          begin
+            tokenizer.decode(truncated_tokens)
+          rescue Tiktoken::UnicodeError
+            truncated_tokens.pop
+            retry unless truncated_tokens.empty?
+            ""
           end
-
-          truncated_text
         end
 
         def below_limit?(text, limit, strict: false)
